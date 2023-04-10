@@ -270,7 +270,7 @@ function callback_mouse_up(e) {
 
         }
 
-        ////Ajustando intervalo em Y a depender da posição final do mouse - acima ou abaixo do clique inicial
+        //Ajustando intervalo em Y a depender da posição final do mouse - acima ou abaixo do clique inicial
         if (e.offsetY > interface.mouse_y) { 
             
             interface.mandel_end_y = interface.mandel_begin_y + e.offsetY*mandel_delta_h; 
