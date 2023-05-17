@@ -23,6 +23,7 @@ var gUltimoT = Date.now();
 var interface = {
     apertado: false,
     animacao: true,
+    passo: false,
 }
 
 //Vertex shader
@@ -78,6 +79,7 @@ function Peixe(x, y, lado, vx, vy, cor) {
     this.pos = vec2(x, y);
 
     this.lado = lado;
+    this.altura = Math.sqrt(3)*this.lado/2;
     this.vertices = [
         vec2(x+Math.cos(theta)*(2*this.lado/3), y+Math.sin(theta)*(2*this.lado/3)),
         vec2(x+Math.cos(theta+2*Math.PI/3)*(2*this.lado/3), y+Math.sin(theta+2*Math.PI/3)*(2*this.lado/3)),
@@ -116,11 +118,13 @@ function Peixe(x, y, lado, vx, vy, cor) {
         if (vy > 0 && vy < 2) { vy = 2 }
         else if (-vy > 0 && -vy < 2) { vy = -2 };
 
-        if (x < 0) { x = -x; vx = -vx; };
-        if (y < 0) { y = -y; vy = -vy; };
-        if (x >= gCanvas.width) { x = gCanvas.width; vx = -vx; };
-        if (y >= gCanvas.height) { y = gCanvas.height; vy = -vy; };
-
+        var raio_de_impacto = 2*this.altura/3;
+        if (x - raio_de_impacto < 0) { x = raio_de_impacto+1; vx = -vx; };
+        if (y - raio_de_impacto < 0) { y = raio_de_impacto+1; vy = -vy; };
+        if (x + raio_de_impacto >= gCanvas.width) { x = gCanvas.width - (raio_de_impacto+1); vx = -vx; };
+        if (y + raio_de_impacto >= gCanvas.height) { y = gCanvas.height - (raio_de_impacto+1); vy = -vy; };
+        
+        this.pos = vec2(x, y);
         this.vel = vec2(vx, vy);
 
         //Computando ângulo da cabeça do peixe
@@ -135,9 +139,9 @@ function Peixe(x, y, lado, vx, vy, cor) {
 
         //Cômputo dos vértices do trinângulo dada nova posição
         this.vertices = [
-            vec2(x+Math.cos(theta)*(2*this.lado/3), y+Math.sin(theta)*(2*this.lado/3)),
-            vec2(x+Math.cos(theta+2*Math.PI/3)*(2*this.lado/3), y+Math.sin(theta+2*Math.PI/3)*(2*this.lado/3)),
-            vec2(x+Math.cos(theta-2*Math.PI/3)*(2*this.lado/3), y+Math.sin(theta-2*Math.PI/3)*(2*this.lado/3)),
+            vec2(x+Math.cos(theta)*(2*this.altura/3), y+Math.sin(theta)*(2*this.altura/3)),
+            vec2(x+Math.cos(theta+2*Math.PI/3)*(2*this.altura/3), y+Math.sin(theta+2*Math.PI/3)*(2*this.altura/3)),
+            vec2(x+Math.cos(theta-2*Math.PI/3)*(2*this.altura/3), y+Math.sin(theta-2*Math.PI/3)*(2*this.altura/3)),
         ];
 
         //Atualização de buffers de posição do peixe
@@ -150,6 +154,59 @@ function Peixe(x, y, lado, vx, vy, cor) {
         this.vel = add(this.vel, vec2(delta_vx, delta_vy));
     }
 };
+
+function separacao(raio_influencia) {
+    for (var i = 0; i < gObjetos.length; i++) {
+        peixe = gObjetos[i];
+        [x, y] = peixe.pos;
+        [vx, vy] = peixe.vel;
+
+        for (var j = 1; j < gObjetos.length; j++) {
+            if (j != i) {
+                peixe_aux = gObjetos[j];
+                [x_aux, y_aux] = peixe_aux.pos;
+                [vx_aux, vy_aux] = peixe_aux.vel;
+
+                var dist = Math.sqrt(Math.pow(x - x_aux, 2) + Math.pow(y - y_aux, 2))
+
+                if (dist <= raio_influencia) {
+                    //if (x_aux > x) {
+
+                    //}
+                    peixe.atualiza_comando((-vx*1/dist), (-vy*1/dist))
+                }
+            }
+        }
+    }
+}
+
+function alinhamento(raio_influencia) {
+    peixe_lider = gObjetos[0];
+    [vx_lider, vy_lider] = peixe_lider.vel;
+
+    for (var i = 1; i < gObjetos.length; i++) {
+        peixe = gObjetos[i];
+        [x, y] = peixe.pos;
+        [vx, vy] = peixe.vel;
+
+        peixe.atualiza_comando((vx_lider-vx)*0.005, (vy_lider-vy)*0.005)
+
+        for (var j = 1; j < gObjetos.length; j++) {
+            if (j != i) {
+                peixe_aux = gObjetos[j];
+                [x_aux, y_aux] = peixe_aux.pos;
+                [vx_aux, vy_aux] = peixe_aux.vel;
+
+                var dist = Math.sqrt(Math.pow(x - x_aux, 2) + Math.pow(y - y_aux, 2))
+
+                if (dist <= raio_influencia) {
+                    peixe.atualiza_comando((vx_aux-vx)*0.01, (vy_aux-vy)*0.01)
+                }
+            }
+        }
+    }
+
+}
 
 function crie_shaders() {
     //Cria o programa
@@ -188,10 +245,22 @@ function desenhe() {
     let delta = (now - gUltimoT) / 1000;
     gUltimoT = now;
 
-    //Seta o intervalo de atualização para zero, pausando a animação se a tecla de pause estiver pressionada
-    if (!interface.animacao) { delta = 0 };
+    //Seta o intervalo de atualização para zero quando a animação for pausada e para 50ms uma vez quando 's' é pressionado
+    if (!interface.animacao) {
+        if (interface.passo) {
+            delta = 0.05;
+            interface.passo = false;
+        }
+        else {
+            delta = 0;
+        }
+    };
   
-    //Recomputa para todo objeto vertices
+    var raio_influencia = 80;
+    separacao(raio_influencia)
+    //alinhamento(raio_influencia);
+
+    //Recomputa vértices para todo objeto
     gPosicoes = [];
     for (let i = 0; i < gObjetos.length; i++)
       gObjetos[i].atualiza_tempo(delta);
@@ -216,9 +285,6 @@ function main() {
   
     //Cria peixe líder
     gObjetos.push(new Peixe(400, 400, 20, gCanvas.width/2, gCanvas.height/4, cor_lider));
-    
-    //Cria peixe de cardume
-    gObjetos.push(new Peixe(200, 100, 20, gCanvas.width/4, gCanvas.height/4, cor_cardume));
   
     //Cria shaders e buffers
     crie_shaders();
@@ -243,17 +309,17 @@ function callback_keyboard(e) {
         [vx, vy] = peixe_lider.vel;
         
         //Aumenta a velocidade na direção da cabeça do peixe em 10% 
-        if (e.key == 'w' || e.key == 'W') {
+        if (e.keyCode == '38') {
             peixe_lider.atualiza_comando(vx*0.1, vy*0.1);
         }
 
         //Diminui a velocidade na direção da cabeça do peixe em 10%
-        if (e.key == 's' || e.key == 'S') {
+        if (e.keyCode == '40') {
             peixe_lider.atualiza_comando(-vx*0.1, -vy*0.1);
         }
 
         //Vira a cabeça do peixe 15 graus no sentido anti-horário
-        if (e.key == 'a' || e.key == 'A') {
+        if (e.keyCode == '37') {
             var vec_horizontal = vec2(1, 0);
             var theta;
             if (vy >= 0) {
@@ -271,7 +337,7 @@ function callback_keyboard(e) {
         }
 
         //Vira a cabeça do peixe 15 graus no sentido horário
-        if (e.key == 'd' || e.key == 'D') {
+        if (e.keyCode == '39') {
             var vec_horizontal = vec2(1, 0);
             var theta;
             if (vy >= 0) {
@@ -292,10 +358,39 @@ function callback_keyboard(e) {
         if (e.key == 'p' || e.key == 'P') {
             interface.animacao = 1 - interface.animacao;
         }
+
+        //Ativa um passo na animação
+        if (e.key == 's' || e.key == 'S') {
+            if(!interface.animacao) {
+                interface.passo = true;
+            }
+        }
+
+        //Cria peixe de cardume
+        if(e.key == '+') {
+            //Posição 1 a 799
+            x = Math.floor(Math.random()*(gCanvas.width - 1)) + 1;
+            y = Math.floor(Math.random()*(gCanvas.height - 1)) + 1;
+
+            //Velocidade 100 a 400
+            vx = Math.floor(Math.random()*(gCanvas.width/2)) + 100;
+            vy = Math.floor(Math.random()*(gCanvas.height/2)) + 100;
+            
+            gObjetos.push(new Peixe(x, y, 20, vx, vy, cor_cardume));
+        }
+
+        //Deleta peixe de cardume
+        if(e.key == '-') {
+            if (gObjetos.length > 1) {
+                gObjetos.pop();
+            }
+        }
     }
 
-    //Atualiza variável de controle em interface para não permitir segurar botão
-    interface.apertado = true;
+    //Atualiza variável de controle em interface para não permitir segurar botão e garantir que shift não conta como botão pressionado
+    if(!e.shiftKey) {
+        interface.apertado = true;
+    }
 }
 
 //Evento de desapertar o botão do teclado
