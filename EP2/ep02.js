@@ -110,13 +110,13 @@ function Peixe(x, y, lado, vx, vy, cor) {
         
         if (vx > gCanvas.width) { vx = gCanvas.width - 2 }
         else if (-vx > gCanvas.width) { vx = -(gCanvas.width - 2)};
-        if (vx > 0 && vx < 2) { vx = 2 }
-        else if (-vx > 0 && -vx < 2) { vx = -2 };
+        //if (vx > 0 && vx < 2) { vx = 2 }
+        //else if (-vx > 0 && -vx < 2) { vx = -2 };
 
         if (vy > gCanvas.height) { vy = gCanvas.height - 2 }
         else if (-vy > gCanvas.height) { vy = -(gCanvas.height - 2) };
-        if (vy > 0 && vy < 2) { vy = 2 }
-        else if (-vy > 0 && -vy < 2) { vy = -2 };
+        //if (vy > 0 && vy < 2) { vy = 2 }
+        //else if (-vy > 0 && -vy < 2) { vy = -2 };
 
         var raio_de_impacto = 2*this.altura/3;
         if (x - raio_de_impacto < 0) { x = raio_de_impacto+1; vx = -vx; };
@@ -156,7 +156,10 @@ function Peixe(x, y, lado, vx, vy, cor) {
 };
 
 function separacao(raio_influencia) {
-    for (var i = 0; i < gObjetos.length; i++) {
+    var num_atualiza = 0;
+    var soma_atualiza = vec2(0, 0);
+
+    for (var i = 1; i < gObjetos.length; i++) {
         peixe = gObjetos[i];
         [x, y] = peixe.pos;
         [vx, vy] = peixe.vel;
@@ -167,21 +170,103 @@ function separacao(raio_influencia) {
                 [x_aux, y_aux] = peixe_aux.pos;
                 [vx_aux, vy_aux] = peixe_aux.vel;
 
-                var dist = Math.sqrt(Math.pow(x - x_aux, 2) + Math.pow(y - y_aux, 2))
+                var dist_vec = vec2(x - x_aux, y - y_aux);
+                var dist = length(dist_vec);
 
                 if (dist <= raio_influencia) {
-                    //if (x_aux > x) {
 
-                    //}
-                    peixe.atualiza_comando((-vx*1/dist), (-vy*1/dist))
+                    num_atualiza += 1;
+                    if (dist < 2) {
+                        dist_vec = vec2(5, 5);
+                    }
+                    soma_atualiza = add(soma_atualiza, mult(3/Math.log(dist)+1, dist_vec));
                 }
             }
         }
+
+        if (num_atualiza != 0) {
+            [delta_x, delta_y] = mult(1/num_atualiza, soma_atualiza);
+            peixe.atualiza_comando(delta_x, delta_y);
+        }
+        num_atualiza = 0;
+        soma_atualiza = vec2(0, 0);
     }
 }
 
 function alinhamento(raio_influencia) {
+    var soma_velocidade = 0;
+    var velocidade_x = 0;
+    var velocidade_y = 0;
+
+    for (var i = 1; i < gObjetos.length; i++) {
+        peixe = gObjetos[i];
+        [x, y] = peixe.pos;
+        [vx, vy] = peixe.vel;
+
+        for (var j = 1; j < gObjetos.length; j++) {
+            if (j != i) {
+                peixe_aux = gObjetos[j];
+                [x_aux, y_aux] = peixe_aux.pos;
+                [vx_aux, vy_aux] = peixe_aux.vel;
+
+                var dist = Math.sqrt(Math.pow(x - x_aux, 2) + Math.pow(y - y_aux, 2));
+
+                if (dist <= raio_influencia) {
+                    soma_velocidade = soma_velocidade + 1;
+                    velocidade_x = velocidade_x + vx_aux;
+                    velocidade_y = velocidade_y + vy_aux;
+                }
+            }
+        }
+
+        if (soma_velocidade != 0) {
+            peixe.atualiza_comando((velocidade_x/soma_velocidade-vx)*0.1, (velocidade_y/soma_velocidade-vy)*0.1)
+        }
+        soma_velocidade = 0;
+        velocidade_x = 0;
+        velocidade_y = 0;
+    }
+
+}
+
+function coesao(raio_influencia) {
+    var soma_baricentro = 0;
+    var baricentro_x = 0;
+    var baricentro_y = 0;
+    
+    for (var i = 1; i < gObjetos.length; i++) {
+        peixe = gObjetos[i];
+        [x, y] = peixe.pos;
+        [vx, vy] = peixe.vel;
+
+        for (var j = 1; j < gObjetos.length; j++) {
+            if (j != i) {
+                peixe_aux = gObjetos[j];
+                [x_aux, y_aux] = peixe_aux.pos;
+                [vx_aux, vy_aux] = peixe_aux.vel;
+
+                var dist = Math.sqrt(Math.pow(x - x_aux, 2) + Math.pow(y - y_aux, 2));
+
+                if (dist <= raio_influencia) {
+                    soma_baricentro = soma_baricentro + 1;
+                    baricentro_x = baricentro_x + x_aux;
+                    baricentro_y = baricentro_y + y_aux;
+                }
+            }
+        }
+        
+        if (soma_baricentro != 0) {
+            peixe.atualiza_comando((baricentro_x/soma_baricentro-x)*0.15, (baricentro_y/soma_baricentro-y)*0.15)
+        }
+        soma_baricentro = 0;
+        baricentro_x = 0;
+        baricentro_y = 0;
+    }
+}
+
+function seguindo_lider() {
     peixe_lider = gObjetos[0];
+    [x_lider, y_lider] = peixe_lider.pos;
     [vx_lider, vy_lider] = peixe_lider.vel;
 
     for (var i = 1; i < gObjetos.length; i++) {
@@ -189,23 +274,9 @@ function alinhamento(raio_influencia) {
         [x, y] = peixe.pos;
         [vx, vy] = peixe.vel;
 
-        peixe.atualiza_comando((vx_lider-vx)*0.005, (vy_lider-vy)*0.005)
-
-        for (var j = 1; j < gObjetos.length; j++) {
-            if (j != i) {
-                peixe_aux = gObjetos[j];
-                [x_aux, y_aux] = peixe_aux.pos;
-                [vx_aux, vy_aux] = peixe_aux.vel;
-
-                var dist = Math.sqrt(Math.pow(x - x_aux, 2) + Math.pow(y - y_aux, 2))
-
-                if (dist <= raio_influencia) {
-                    peixe.atualiza_comando((vx_aux-vx)*0.01, (vy_aux-vy)*0.01)
-                }
-            }
-        }
+        peixe.atualiza_comando((x_lider - x)*0.015, (y_lider - y)*0.015);
+        peixe.atualiza_comando((vx_lider-vx)*0.015, (vy_lider-vy)*0.015);
     }
-
 }
 
 function crie_shaders() {
@@ -255,10 +326,14 @@ function desenhe() {
             delta = 0;
         }
     };
-  
-    var raio_influencia = 80;
-    separacao(raio_influencia)
-    //alinhamento(raio_influencia);
+
+    if (delta != 0) {
+        var raio_influencia = 70;
+        separacao(40)
+        alinhamento(150);
+        coesao(150);
+        seguindo_lider();
+    }
 
     //Recomputa vértices para todo objeto
     gPosicoes = [];
@@ -310,12 +385,12 @@ function callback_keyboard(e) {
         
         //Aumenta a velocidade na direção da cabeça do peixe em 10% 
         if (e.keyCode == '38') {
-            peixe_lider.atualiza_comando(vx*0.1, vy*0.1);
+            peixe_lider.atualiza_comando(vx*0.2, vy*0.2);
         }
 
         //Diminui a velocidade na direção da cabeça do peixe em 10%
         if (e.keyCode == '40') {
-            peixe_lider.atualiza_comando(-vx*0.1, -vy*0.1);
+            peixe_lider.atualiza_comando(-vx*0.2, -vy*0.2);
         }
 
         //Vira a cabeça do peixe 15 graus no sentido anti-horário
