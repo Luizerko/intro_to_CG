@@ -7,8 +7,9 @@
 
 //Definição de constantes e variáveis globais
 const FUNDO = [0, 0.41, 0.58, 1];
-const cor_lider = vec4(0.65, 0.65, 0.65, 1);
-const cor_cardume = vec4(0.75, 0.75, 0.75, 1);
+const cor_lider = vec4(0.3, 0.9, 0.4, 1);
+const cor_cardume = vec4(1, 0.62, 0, 1);
+const cor_coral = vec4(0.97, 0.49, 0.44, 1);
 
 var gl;
 var gCanvas;
@@ -17,6 +18,7 @@ var gShader = {};
 var gPosicoes = [];
 var gCores = [];
 var gObjetos = [];
+var gObstaculos = [];
 var gUltimoT = Date.now();
 
 //Variável de interface de comandos
@@ -150,40 +152,159 @@ function Peixe(x, y, lado, vx, vy, cor) {
         gPosicoes.push(this.vertices[2]);
     }
 
+    //Função de atualização de velocidade do peixe
     this.atualiza_comando = function(delta_vx, delta_vy) {
         this.vel = add(this.vel, vec2(delta_vx, delta_vy));
     }
 };
 
+//Função vista em aula para aproximar desenho de objeto circular com triângulos
+function aproxima_disco(raio, ref=6) {
+    let vertices = [
+        vec2(raio, 0),
+        vec2(0, raio),
+        vec2(-raio, 0),
+        vec2(0, -raio),
+      ];
+    
+      for (let i = 1; i < ref; i++) {
+        let novo = [];
+        let nv = vertices.length;
+
+        for (let j = 0; j < nv; j++) {
+          novo.push(vertices[j]);
+          
+          let k = (j + 1) % nv;
+
+          let v0 = vertices[j];
+          let v1 = vertices[k];
+          let m = mix(v0, v1, 0.5);
+
+          let s = raio / length(m);
+          
+          m = mult(s, m)
+
+          novo.push(m);
+        }
+
+        vertices = novo;
+      }
+
+      return vertices;
+}
+
+//Classe de obstáculos
+function Obstaculo(x, y, raio, cor) {
+    //Define centro do obstaculo, raio e vértices dado pela função de aproximar discos
+    this.pos = vec2(x, y);
+    this.raio = raio;
+    this.vertices = aproxima_disco(raio);
+
+    //Adiciona vértices e cores para esses vértices
+    let nv = this.vertices.length;
+    for (let i = 0; i < nv; i++) {
+        let k = (i + 1) % nv;
+        gPosicoes.push(this.pos);
+        gPosicoes.push(add(this.pos, this.vertices[i]));
+        gPosicoes.push(add(this.pos, this.vertices[k]));
+
+        gCores.push(cor);
+        gCores.push(cor);
+        gCores.push(cor);
+    }
+
+    //Função que readiciona vértices de obstáculos uma vez que estamos sempre limpando o buffer de posições para redesenho
+    this.redesenha_vertices = function () {
+        let nv = this.vertices.length;
+        for (let i = 0; i < nv; i++) {
+            let k = (i + 1) % nv;
+            gPosicoes.push(this.pos);
+            gPosicoes.push(add(this.pos, this.vertices[i]));
+            gPosicoes.push(add(this.pos, this.vertices[k]));
+        }
+    }
+}
+
+//Função de desvio de obstáculo. Funcionamento análogo à função de separação, mas computa o vetor de distância para cada obstáculo, não o vetor médio.
+//Esse vetor tem um fator de ajuste numa função (X/log(distância*Y))^K + Z para garantir que boids mais próximos do obstáculo, e portanto com
+//magnitudes de vetor de distância menores, sejam mais influenciados pelo obstaculo, mas sem exageros na atualização de velocidades.
+function desvia_obstaculos() {
+    //Iteração por boids
+    for (var i = 0; i < gObjetos.length; i++) {
+        peixe = gObjetos[i];
+        [x, y] = peixe.pos;
+        [vx, vy] = peixe.vel;
+
+        //Iteração por objetos
+        for (var j = 0; j < gObstaculos.length; j++) {
+            obstaculo = gObstaculos[j];
+            [x_obs, y_obs] = obstaculo.pos;
+
+            //Cômputo do vetor de distância
+            var dist_vec = vec2(x - x_obs, y - y_obs);
+            var dist = length(dist_vec);
+
+            //Teste de raio de influência e atualização da média dos vetores de distância. Note que o raio de influencia de um objeto é seu raio + 20
+            if (obstaculo.raio+20 > dist) {
+
+                //Tratamento de caso particular em que boids estão muito próximos, distância quase nula, para garantir magnitude mínima de vetor
+                //de distância
+                if (dist < 2) {
+                    dist_vec = vec2(10, 10);
+                }
+
+                //Atualização da velocidade do peixe dentro do raio de influencia de um obstáculo
+                peixe.atualiza_comando(dist_vec[0]*((Math.pow(2/Math.log(dist)), 3)+1), dist_vec[1]*((Math.pow(2/Math.log(dist)), 3)+1));
+            }
+        }
+    }
+
+}
+
+//Função de separação entre boids. Para cada boid, o vetor de distância médio (boid_selecionado - boid_raio_influencia) dentro do raio de
+//influência é calculado. Esse vetor tem um fator de ajuste numa função X/log(distância*Y) + Z para garantir que boids mais próximos, e portanto com
+//magnitudes de vetor de distância menores, influenciem mais a separação com outro boid, mas sem exageros na atualização de velocidades. O boid
+//em questão, por fim, tem sua velocidade atualizada para afastar-se dos boids em seu raio de influência, mantendo a fomração grupal com espaço
+//individual para cada peixe
 function separacao(raio_influencia) {
     var num_atualiza = 0;
     var soma_atualiza = vec2(0, 0);
 
+    //Iteração por boids
     for (var i = 1; i < gObjetos.length; i++) {
         peixe = gObjetos[i];
         [x, y] = peixe.pos;
         [vx, vy] = peixe.vel;
 
-        for (var j = 1; j < gObjetos.length; j++) {
+        //Iteração por todos os outros boids para cada peixe selecionado. Note que a separação também separa os boids do líder, diferente dos outros
+        //comportamentos
+        for (var j = 0; j < gObjetos.length; j++) {
             if (j != i) {
                 peixe_aux = gObjetos[j];
                 [x_aux, y_aux] = peixe_aux.pos;
                 [vx_aux, vy_aux] = peixe_aux.vel;
 
+                //Cômputo do vetor de distância
                 var dist_vec = vec2(x - x_aux, y - y_aux);
                 var dist = length(dist_vec);
 
+                //Teste de raio de influência e atualização da média dos vetores de distância
                 if (dist <= raio_influencia) {
-
+                    
+                    //Tratamento de caso particular em que boids estão muito próximos, distância quase nula, para garantir magnitude mínima de vetor
+                    //de distância
                     num_atualiza += 1;
                     if (dist < 2) {
                         dist_vec = vec2(5, 5);
                     }
-                    soma_atualiza = add(soma_atualiza, mult(3/Math.log(dist)+1, dist_vec));
+
+                    //Atualização da média dos vetores de distância com fatores de ajuste
+                    soma_atualiza = add(soma_atualiza, mult(3/Math.log(dist*1000)+1, dist_vec));
                 }
             }
         }
 
+        //Atualização da velocidade do boid influenciado por outros boids dentro do raio de influência
         if (num_atualiza != 0) {
             [delta_x, delta_y] = mult(1/num_atualiza, soma_atualiza);
             peixe.atualiza_comando(delta_x, delta_y);
@@ -193,16 +314,21 @@ function separacao(raio_influencia) {
     }
 }
 
+//Função de alinhamento entre boids. Para cada boid, a velocidade média de todos os outros boids do cardume dentro do raio de influência é calculada.
+//O boid em questão tem sua velocidade atualizada para aproximar-se da velocidade dos boids em seu raio de influência, alinhando a direção e sentido
+// de navegação
 function alinhamento(raio_influencia) {
     var soma_velocidade = 0;
     var velocidade_x = 0;
     var velocidade_y = 0;
 
+    //Iteração por boids
     for (var i = 1; i < gObjetos.length; i++) {
         peixe = gObjetos[i];
         [x, y] = peixe.pos;
         [vx, vy] = peixe.vel;
 
+        //Iteração por todos os outros boids para cada peixe selecionado
         for (var j = 1; j < gObjetos.length; j++) {
             if (j != i) {
                 peixe_aux = gObjetos[j];
@@ -211,6 +337,7 @@ function alinhamento(raio_influencia) {
 
                 var dist = Math.sqrt(Math.pow(x - x_aux, 2) + Math.pow(y - y_aux, 2));
 
+                //Teste de raio de influência e atualização da velocidade média
                 if (dist <= raio_influencia) {
                     soma_velocidade = soma_velocidade + 1;
                     velocidade_x = velocidade_x + vx_aux;
@@ -219,8 +346,9 @@ function alinhamento(raio_influencia) {
             }
         }
 
+        //Atualização da velocidade do boid influenciado por outros boids dentro do raio de influência
         if (soma_velocidade != 0) {
-            peixe.atualiza_comando((velocidade_x/soma_velocidade-vx)*0.1, (velocidade_y/soma_velocidade-vy)*0.1)
+            peixe.atualiza_comando((velocidade_x/soma_velocidade-vx)*0.02, (velocidade_y/soma_velocidade-vy)*0.02)
         }
         soma_velocidade = 0;
         velocidade_x = 0;
@@ -229,16 +357,20 @@ function alinhamento(raio_influencia) {
 
 }
 
+//Função de coesão entre boids. Para cada boid, o baricentro de todos os outros boids de cardume dentro do raio de influência é calculado.
+//O boid em questão tem sua velocidade atualizada para aproximar-se do baricentro dos boids em seu raio de influência
 function coesao(raio_influencia) {
     var soma_baricentro = 0;
     var baricentro_x = 0;
     var baricentro_y = 0;
     
+    //Iteração por boids
     for (var i = 1; i < gObjetos.length; i++) {
         peixe = gObjetos[i];
         [x, y] = peixe.pos;
         [vx, vy] = peixe.vel;
 
+        //Iteração por todos os outros boids para cada peixe selecionado
         for (var j = 1; j < gObjetos.length; j++) {
             if (j != i) {
                 peixe_aux = gObjetos[j];
@@ -247,6 +379,7 @@ function coesao(raio_influencia) {
 
                 var dist = Math.sqrt(Math.pow(x - x_aux, 2) + Math.pow(y - y_aux, 2));
 
+                //Teste de raio de influência e atualização do baricentro
                 if (dist <= raio_influencia) {
                     soma_baricentro = soma_baricentro + 1;
                     baricentro_x = baricentro_x + x_aux;
@@ -255,8 +388,9 @@ function coesao(raio_influencia) {
             }
         }
         
+        //Atualização da velocidade do boid influenciado por outros boids dentro do raio de influência
         if (soma_baricentro != 0) {
-            peixe.atualiza_comando((baricentro_x/soma_baricentro-x)*0.15, (baricentro_y/soma_baricentro-y)*0.15)
+            peixe.atualiza_comando((baricentro_x/soma_baricentro-x)*0.02, (baricentro_y/soma_baricentro-y)*0.02)
         }
         soma_baricentro = 0;
         baricentro_x = 0;
@@ -264,6 +398,8 @@ function coesao(raio_influencia) {
     }
 }
 
+//Função para reger grupo de boids. Atualização de velocidade dos boids do cardume para aproximação do líder (coesão com o líder)
+// e para correspondência de velocidade (alinhamento com o líder)
 function seguindo_lider() {
     peixe_lider = gObjetos[0];
     [x_lider, y_lider] = peixe_lider.pos;
@@ -274,7 +410,7 @@ function seguindo_lider() {
         [x, y] = peixe.pos;
         [vx, vy] = peixe.vel;
 
-        peixe.atualiza_comando((x_lider - x)*0.015, (y_lider - y)*0.015);
+        peixe.atualiza_comando((x_lider - x)*0.01, (y_lider - y)*0.01);
         peixe.atualiza_comando((vx_lider-vx)*0.015, (vy_lider-vy)*0.015);
     }
 }
@@ -297,8 +433,8 @@ function crie_shaders() {
     gl.enableVertexAttribArray(aPositionLoc);
 
     //Repetição dos processos para buffer de cores
-    var bufCores = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, bufCores);
+    gShader.bufCores = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, gShader.bufCores);
     gl.bufferData(gl.ARRAY_BUFFER, flatten(gCores), gl.STATIC_DRAW);
     var aColorLoc = gl.getAttribLocation(gShader.program, "aColor");
     gl.vertexAttribPointer(aColorLoc, 4, gl.FLOAT, false, 0, 0);
@@ -327,22 +463,37 @@ function desenhe() {
         }
     };
 
+    //Computa comportamentos de cardume e atualiza velocidades de cada peixe. Note que funções de comportamento
+    //podem ter raios de influencia diferentes
     if (delta != 0) {
-        var raio_influencia = 70;
-        separacao(40)
-        alinhamento(150);
-        coesao(150);
+        desvia_obstaculos();
+        separacao(30)
+        alinhamento(80);
+        coesao(80);
         seguindo_lider();
     }
 
     //Recomputa vértices para todo objeto
     gPosicoes = [];
-    for (let i = 0; i < gObjetos.length; i++)
+
+    //Peixe líder
+    gObjetos[0].atualiza_tempo(delta);
+
+    //Obstáculos
+    for (let i = 0; i < gObstaculos.length; i++)
+      gObstaculos[i].redesenha_vertices();
+
+    //Boids de cardume
+    for (let i = 1; i < gObjetos.length; i++)
       gObjetos[i].atualiza_tempo(delta);
   
     //Atualiza o buffer de vertices
     gl.bindBuffer(gl.ARRAY_BUFFER, gShader.bufPosicoes);
     gl.bufferData(gl.ARRAY_BUFFER, flatten(gPosicoes), gl.STATIC_DRAW);
+
+    //Atualiza o buffer de cores
+    gl.bindBuffer(gl.ARRAY_BUFFER, gShader.bufCores);
+    gl.bufferData(gl.ARRAY_BUFFER, flatten(gCores), gl.STATIC_DRAW);
   
     //Limpa a janela e desenha próximo quadro
     gl.clear(gl.COLOR_BUFFER_BIT);
@@ -359,7 +510,22 @@ function main() {
     if (!gl) alert("WebGL 2.0 isn't available");
   
     //Cria peixe líder
-    gObjetos.push(new Peixe(400, 400, 20, gCanvas.width/2, gCanvas.height/4, cor_lider));
+    gObjetos.push(new Peixe(400, 400, 25, gCanvas.width/2, gCanvas.height/4, cor_lider));
+
+    //Cria de 1 a 6 obstaculos no mapa
+    var num_obs = Math.floor(Math.random()*6 + 1);
+    //num_obs = 0;
+    for (var i = 0; i < num_obs; i++) {
+        //Sorteia raio do obstáculo, mínimo 20 e máximo 80, e sorteia posição de obstáculos no mapa limitando seu posicionamento pelo
+        //raio de influencia do obstaculo, raio+30.
+        var raio = Math.floor(Math.random()*61 + 20);
+        var x = Math.floor(Math.random()*(gCanvas.width-2*(raio+20)) + (raio+20));
+        var y = Math.floor(Math.random()*(gCanvas.height-2*(raio+20)) + (raio+20));
+
+        //Cria obstáculos
+        gObstaculos.push(new Obstaculo(x, y, raio, cor_coral));
+    }
+
   
     //Cria shaders e buffers
     crie_shaders();
@@ -383,17 +549,17 @@ function callback_keyboard(e) {
         peixe_lider = gObjetos[0];
         [vx, vy] = peixe_lider.vel;
         
-        //Aumenta a velocidade na direção da cabeça do peixe em 10% 
+        //Aumenta a velocidade na direção da cabeça do peixe em 10% quando up_arrow é pressionado
         if (e.keyCode == '38') {
             peixe_lider.atualiza_comando(vx*0.2, vy*0.2);
         }
 
-        //Diminui a velocidade na direção da cabeça do peixe em 10%
+        //Diminui a velocidade na direção da cabeça do peixe em 10% quando down_arrow é pressionado
         if (e.keyCode == '40') {
             peixe_lider.atualiza_comando(-vx*0.2, -vy*0.2);
         }
 
-        //Vira a cabeça do peixe 15 graus no sentido anti-horário
+        //Vira a cabeça do peixe 15 graus no sentido anti-horário quando left_arrow é pressionado
         if (e.keyCode == '37') {
             var vec_horizontal = vec2(1, 0);
             var theta;
@@ -411,7 +577,7 @@ function callback_keyboard(e) {
             peixe_lider.atualiza_comando(new_vx - vx, new_vy - vy);
         }
 
-        //Vira a cabeça do peixe 15 graus no sentido horário
+        //Vira a cabeça do peixe 15 graus no sentido horário quando right_arrow é pressionado
         if (e.keyCode == '39') {
             var vec_horizontal = vec2(1, 0);
             var theta;
@@ -451,7 +617,7 @@ function callback_keyboard(e) {
             vx = Math.floor(Math.random()*(gCanvas.width/2)) + 100;
             vy = Math.floor(Math.random()*(gCanvas.height/2)) + 100;
             
-            gObjetos.push(new Peixe(x, y, 20, vx, vy, cor_cardume));
+            gObjetos.push(new Peixe(x, y, 25, vx, vy, cor_cardume));
         }
 
         //Deleta peixe de cardume

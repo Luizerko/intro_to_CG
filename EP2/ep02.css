@@ -1,3 +1,17 @@
+body {
+    display: flex;
+    background-color: #33C1FF;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+}
+
+h1 {
+    height: 50px;
+    color: red;
+    font-size: 40px;
+}
+
 canvas {
     border: 2px solid black;
 }

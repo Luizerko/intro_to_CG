@@ -1,0 +1,114 @@
+Relatório EP2
+Aluno: Luis Vitor Zerkowski - 9837201
+
+Esse relatório diz respeito ao segundo exercício programa da disciplina de 
+introdução à computação gráfica. Aqui informações acerca do funcionamento do
+projeto, decisões de implementação, organização pessoal e feedback do exercício
+podem ser encontradas.
+
+Desenvolvimento:
+Para realizar a tarefa proposta, resolvi utilizar de duas classes, uma de peixes
+e outra de obstáculos. Para os obstáculos, bastou incializá-los com suas devidas
+posições e cores. Suas posições são dadas por um centro e pelo raio uma vez que
+os obstáculos do exercício são todos redondos. Para ser mais preciso, além de
+sua inicialização, também necessitam de um método de atualização para
+reescrever as mesmas posições no buffer a ser passado para o vertex shader
+ - isso porque os obstáculos não se movem.
+
+Já para os peixes, há um pouco mais de complexidade envolvida, uma vez que são
+elementos dinâmicos. Para facilitar a implementação da interação com outros
+objetos da cena, Os peixes são definidos apenas por um ponto central que,
+em certas rotinas, podem afetar outros peixes num raio de influência, como uma
+circunferência. Seus vértices para desenho, no entanto, definem um triângulo
+equilatero e são computados em função da velocidade do peixe, garantido que
+uma das pontas do triângulo, a cabeça, sempre estará apontada na direção de
+seu movimento.
+
+Para além dos objetos e as tecnicalidades que os envolvem, uma variável de
+interface foi criada para garantir o funcionamento correto dos comandos
+requisitados nas funções de callback. Além de entender o pressionar e soltar
+dos botões, era preciso entender o estado do programa, pausado ou não pausado,
+para poder implementar o funcionamento do passo.
+
+A simulação do meu projeto funcionou bastante bem. Os boids se comportam como
+num cardume, movimentando-se sempre na intenção de alinharem-se com o peixe
+líder e aproximarem-se do mesmo, mas dando bastante atenção ao alinhamento,
+coesão e separação mínima do corpo de boids local.
+
+Dificuldades:
+A maior dificuldade do programa foi a implementação do comportamento de
+cardume, tanto na implementação das funções como no balancenamento dos
+parâmetros que as regem.
+
+Para a separação, utilizei a soma dos vetores de distância de boids dentro de um
+raio de influência. Esse método facilita muito o cômputo da direção de separação
+dos mesmos, mas dificulta bastante a implementação da força, uma vez que os
+vetores ficam menore em magnitude quando os boids se aproximam, mas a força
+deveria ser maior quando os boids estão próximos. Para fazer essa compensação,
+utilize o inverso do log na distância entre os boids - além de fatores de
+correação apenas para deixar o desenho mais fluido. Essa função decresce expo-
+nencialmente de zero até infinito e consegue dar conta de aumentar a força de
+separaçã dos boids quanto menor a distância entre os mesmos. Houve, ainda, a
+necessidade de lidar com o caso particular de peixes sobrepostos, caso que
+resultava num vetor de distâncias nulo. Para lidar com essa situação, bastava
+implementar uma pequena força residual que separava os peixes caso eles se
+sobrepusessem. Essa força residual ponderada pelo inverso do log da distância
+dava conta de separar os peixes novamente.
+
+Vale notar que a separação voltou a ser um problema num momento posterior do
+exercício, quando da implementação dos obstáculos. A solução encontrada é
+análoga à descrita na separação de peixes, mas as constantes tiveram que ser
+rebalanceadas para funcionarem com os obstáculos.
+
+Para o alinhamento e a coesão, a implementação ficou bem mais simples. Bastou
+calcular a velocidade média e a posição média dos boids dentro do raio de
+influência e atualizar as velocidades dos boids para aproximarem-se dessas
+médias. Para o alinhamento, isso significa que eles corrigiam a direção e
+sentido de suas velocidades. Para a coesão, isso significa que eles andavam
+na direção e sentido que aproximava-os do centro de um grupo.
+
+Fazer todos os boids aproximarem-se do líder e alinharem-se com o mesmo
+foi uma tarefa mais fácil. Bastava implementar alinhamento e coesão de todos os
+boids com o peixe líder, como se ele formasse um grupo sozinho de um peixe só
+cujo raio de influência era global.
+
+Em se tratando dos parâmetros, muito tempo foi gasto em ajustes para que os
+movimentos ficassem fluidos no desenho e para que as influências do corpo do
+cardume, peixe líder e obstáculos fossem todas balanceadas.
+
+Bugs:
+Aqui ficam as questões residuais do programa que não foram resolvidas quando da
+entrega. Nota-se que majoritariamente não são problemas, mas pontos que poderiam
+ser melhorados para uma animação ainda mais legal.
+
+1. (Problema) Boids podem nascer dentro dos objetos. Bug que pode ser resolvido
+facilmente com condicional iterando nos obstáculos quando da criação de um
+peixe, mas não tive tempo de corrigir. Esse problema não afeta muito o funciona-
+mento do programa, uma vez que os objetos logo "expulsam" os boids de dentro
+e tudo volta a funcionar normalmente.
+
+2. (Problema) Apesar do problema de separação dos peixes ter sido resolvido
+tratando o caso em que estão sobrepostos, a interação com obstáculos não foi
+completamente resolvida. O resultado prático disso é que, por vezes, quando a
+velocidade do peixe é muito alta em direção a um obstáculo, esse peixe pode
+acabar "entrando" no obstáculo. Em poucos quadros de animação, o peixe já é
+"expelido" e volta ao comportamento normal, mas não deveria ser possível
+adentrar nos limites do objeto.
+
+3. (Melhoria) Boids atualizam velocidade muito rápido em certas ocasiões e isso
+cause um efeito esquisito na animação, como uma tremedeira do peixe. Esse é o
+comportamento esperado diante do que foi feito no programa e parece razoável
+em se tratando do cardume, uma vez que cada peixe faz pequenos movimentos de
+ajuste de posicionamento. Essas mudanças bruscas, no entanto, dão a sensação
+de confusão em situações limite - quando o peixe muda da velocidade vx para 
+-vx, por exemplo.
+
+4. (Melhoria) O desenho dos peixes resume-se a um triângulo e poderia ser
+aprimorado para deixar a animação mais interessante.
+
+Organização de trabalho:
+Por conta de semanas atarefadas e cheias de prova, comecei o exercício mais
+tarde do que gostaria, no dia 12/05. Desde o momento que comecei a terefa,
+no entanto, dediquei bastante tempo para resolvê-la. Com dias mais trabalhados
+do que outros, dediquei uma média de 3 horas por dia durante esses 9 dias para
+resolver o exercício, totalizando por volta das 27 horas de trabalho.
