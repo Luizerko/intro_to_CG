@@ -1,0 +1,29 @@
+Para realizar a tarefa pedida, resolvi montar uma cena com 3 cubos e 4 esferas.
+As cores do cubo são aquelas determinadas no enunciado do exercício. Já para as
+esferas, as cores de cada vértice são geradas randomicamente quando da adição
+dos vértices à lista de vértices de cada esfera. As posições e rotações de cada
+objeto foram determinadas por mim a fim de causar um efeito visual interessante
+na cena, explorar os possíveis eixos de giro de cada objeto e brincar com as
+profundidades/relações de ordem dos objetos.
+
+A câmera começa na posição sugerida pelo professor no arquivo de configuração
+fornecido, (150, 150, 150), com o vetor up fornecido, (0, 1, 0) e olhando para
+o ponto de centralização fornecido, (0, 0, 0), mas com [pitch, yaw, roll] a-
+daptados para melhor visualização da cena, [0, 0, 20]. O CDR fica parada no ini-
+cial meio da cena enquanto outros objetos ficam rodando em outras posições. A
+esfera de cima foi feita para experimentar os efeitos de uma esfera rodando com
+um pedaço inicialmente fora da cena. O cubo da esquerda foi feito com o mesmo
+propósito, mas para cubos. Note que, em sua frente, foi colocada uma pequena
+esfera para testar os efeitos de profundidade. Na direita, os efeitos de pro-
+fundidade são testados na relação contrária, com um paralelepípedo na frente de
+uma elipse, aproveitando para brincar com escalas e fazer dos cubos e esferas
+menos regulares. Por fim, uma elipse foi colocada na parte inferior da cena para
+testar uma rotação ao redor de seu maior comprimento, criando um efeito de bas-
+tante diferente das outras esferas.
+
+Meu programa não tem nenhum bug conhecido. A alocação e movimentação dos obje-
+tos está funcionando devidamente, bem como a movimentação da câmera/nave. Além
+disso, os comandos de interface estão todos funcionais e o comportamente da
+execução, pausa e passo estão devidamente operantes. Agora sobre as dependênci-
+as, além de código escrito por mim, as únicas bibliotecas utilizadas foram as
+fornecidas pelo professor em aula, macWebglUtils.js e MVnew.js.
